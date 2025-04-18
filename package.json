@@ -1,0 +1,17 @@
+{
+  "name": "cuff2ical",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "ical-generator": "^8.1.1",
+    "jsdom": "^26.1.0",
+    "midday": "^21.7.6"
+  }
+}
