@@ -20,34 +20,43 @@ const zone = new Date().getTimezoneOffset()
 
 const calendar = ical({name: 'my epic CUFF week!'})
 
+class Event {
+    static fromUrl = url => fetch(url).then(r => r.text()).then(text => {
+        const {window: {document}} = new JSDOM(text)
+        const events = this.fromDoc(document)
+        events.forEach(o => Object.assign(o, {url}))
+        return events
+    })
+    static fromDoc = document => {
+        const summary = document.querySelector('h1').innerHTML
+        const dateTimes = document.querySelectorAll('.date-time')
+        return [...dateTimes].map(dateTime => {
+            const {month, day, time} = selectors(dateTime, '.month', '.day', '.time')
+            const duration = [...document.querySelector('#detailsColumn').querySelectorAll('div')]
+                .flatMap(e => /\d+ minutes/.exec(e.innerHTML)?.[0])
+                .filter(Boolean)?.[0]
+            if (!/minutes/i.test(duration)) {
+                console.error(duration)
+                throw new Error('something wrong. this should be in minutes?')
+            }
+            const minutes = parseInt(/\d+/.exec(duration)?.[0], 10)
+            const mTime = toMilitary(time)
+            const start = new Date(`${year}-${deAbbr[month]}-${day}T${mTime}-06:00`)
+            const end = new Date(start)
+            end.setMinutes(end.getMinutes() + minutes)
+            return new Event({summary, start, end})
+        })
+    }
+    constructor(props) {
+        Object.assign(this, props)
+    }
+}
+
 const promises = []
 for await (const url of rl) {
-    promises.push(
-        fetch(url)
-            .then(r => r.text())
-            .then(text => {
-                const {window: {document}} = new JSDOM(text)
-                const summary = document.querySelector('h1').innerHTML
-                const dateTimes = document.querySelectorAll('.date-time')
-                for (const dateTime of dateTimes) {
-                    const {month, day, time} = selectors(dateTime, '.month', '.day', '.time')
-                    const duration = [...document.querySelector('#detailsColumn').querySelectorAll('div')]
-                        .flatMap(e => /\d+ minutes/.exec(e.innerHTML)?.[0])
-                        .filter(Boolean)?.[0]
-                    if (!/minutes/i.test(duration)) {
-                        console.error(duration)
-                        throw new Error('something wrong. this should be in minutes?')
-                    }
-                    const minutes = parseInt(/\d+/.exec(duration)?.[0], 10)
-                    const mTime = toMilitary(time)
-                    const start = new Date(`${year}-${deAbbr[month]}-${day}T${mTime}-06:00`)
-                    const end = new Date(start)
-                    end.setMinutes(end.getMinutes() + minutes)
-                    const eventSpec = {summary, url, start, end}
-                    calendar.createEvent(eventSpec)
-                }
-            })
-        )
+    promises.push(Event.fromUrl(url).then(events => {
+        events.forEach(eventSpec => calendar.createEvent(eventSpec))
+    }))
 }
 
 Promise.all(promises).then(() => console.log(calendar.toString()))
