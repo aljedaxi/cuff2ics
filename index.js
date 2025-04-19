@@ -2,6 +2,14 @@ import {JSDOM} from 'jsdom'
 import {toMilitary} from 'midday'
 import ical from 'ical-generator'
 import readline from 'readline'
+import {parseArgs} from 'node:util'
+import {mkdir, writeFile} from 'node:fs/promises'
+import {join} from 'node:path'
+const options = {
+    multi: {short: 'm', type: 'boolean', default: false},
+    multiDir: {type: 'string', default: 'cal'},
+}
+const {values: {multi, multiDir}} = parseArgs({options})
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -18,7 +26,6 @@ const deAbbr = {Apr: '04'}
 const year = new Date().getFullYear()
 const zone = new Date().getTimezoneOffset()
 
-const calendar = ical({name: 'my epic CUFF week!'})
 
 class Event {
     static fromUrl = url => fetch(url).then(r => r.text()).then(text => {
@@ -54,9 +61,24 @@ class Event {
 
 const promises = []
 for await (const url of rl) {
-    promises.push(Event.fromUrl(url).then(events => {
-        events.forEach(eventSpec => calendar.createEvent(eventSpec))
-    }))
+    promises.push(Event.fromUrl(url))
 }
 
-Promise.all(promises).then(() => console.log(calendar.toString()))
+Promise.all(promises).then((ess) => {
+    if (!multi) {
+        const calendar = ical({name: 'my epic CUFF week!'})
+        ess.forEach(events => events.forEach(e => calendar.createEvent(e)))
+        console.log(calendar.toString())
+        return
+    }
+    const __dirname = import.meta.dirname
+    return mkdir(join(__dirname, multiDir), {recursive: true}).then(_dirCreation => {
+        return ess.flatMap(es => es.map(event => {
+            const {summary} = event
+            const calendar = ical({name: summary})
+            calendar.createEvent(event)
+            const filename = join(__dirname, multiDir, `${summary.replace(/\s/g, '-')}.ics`)
+            return writeFile(filename, calendar.toString())
+        }))
+    })
+})
